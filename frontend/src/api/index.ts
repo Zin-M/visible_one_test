@@ -2,7 +2,7 @@ import axios from 'axios';
 import { User, Booking, GroupedBooking, BookingSummary, Role } from '../types';
 
 const api = axios.create({
-    baseURL: 'http://localhost:3001/api', // Match the backend server URL explicitly
+    baseURL: import.meta.env.VITE_API_URL,
 });
 
 // Intercept requests to inject the JWT token
@@ -33,9 +33,17 @@ export const loginUser = async (name: string, password: string): Promise<{ token
 
 // --- USERS API --- //
 
-export const fetchUsers = async (): Promise<User[]> => {
-    const { data } = await api.get('/users');
-    return data.data; // backend wraps in { success, data }
+export interface Paginated<T> {
+    data: T[];
+    total: number;
+    page: number;
+    limit: number;
+    totalPages: number;
+}
+
+export const fetchUsers = async (page = 1, limit = 10): Promise<Paginated<User>> => {
+    const { data } = await api.get('/users', { params: { page, limit } });
+    return data; // { success, data, total, page, limit, totalPages }
 };
 
 export const createUser = async (name: string, role: Role, passwordRaw: string): Promise<User> => {
@@ -54,9 +62,9 @@ export const deleteUser = async (id: string): Promise<void> => {
 
 // --- BOOKINGS API --- //
 
-export const fetchBookings = async (): Promise<Booking[]> => {
-    const { data } = await api.get('/bookings');
-    return data.data;
+export const fetchBookings = async (page = 1, limit = 10): Promise<Paginated<Booking>> => {
+    const { data } = await api.get('/bookings', { params: { page, limit } });
+    return data;
 };
 
 export const createBooking = async (startTime: string, endTime: string): Promise<Booking> => {

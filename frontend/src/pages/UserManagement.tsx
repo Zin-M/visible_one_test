@@ -1,212 +1,185 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
+import { useForm } from 'react-hook-form';
+import { z } from 'zod';
+import { zodResolver } from '@hookform/resolvers/zod';
 import { useAuth } from '../context/UserContext';
 import { User, Role } from '../types';
 import { fetchUsers, createUser, deleteUser, extractError, updateRole } from '../api';
-import { Button } from '../components/ui/button';
-import { Input } from '../components/ui/input';
-import { Table, TableHeader, TableRow, TableHead, TableBody, TableCell } from '../components/ui/table';
-import { Card, CardHeader, CardTitle, CardContent, CardDescription } from '../components/ui/card';
-import { Label } from '../components/ui/label';
-import { Badge } from '../components/ui/badge';
-import { Users, UserPlus, Fingerprint, ShieldAlert, Trash2 } from 'lucide-react';
+import { Pagination } from '../components/Pagination';
+
+const schema = z.object({
+    name: z.string().min(2, 'Name must be at least 2 characters'),
+    password: z.string().min(6, 'Password must be at least 6 characters'),
+    role: z.enum(['user', 'owner', 'admin'] as const),
+});
+type FormData = z.infer<typeof schema>;
 
 export const UserManagement = () => {
     const { user, setCredentials } = useAuth();
-    const [users, setUsers] = useState<User[]>([]);
+    const [rows, setRows] = useState<User[]>([]);
+    const [total, setTotal] = useState(0);
+    const [totalPages, setTotalPages] = useState(1);
+    const [page, setPage] = useState(1);
+    const [pageSize, setPageSize] = useState(10);
+    const [actionError, setActionError] = useState<string | null>(null);
 
-    // Creates
-    const [name, setName] = useState('');
-    const [password, setPassword] = useState('');
-    const [role, setRole] = useState<Role>('user');
-    const [error, setError] = useState<string | null>(null);
-    const [loading, setLoading] = useState(false);
+    const { register, handleSubmit, reset, setError, formState: { errors, isSubmitting } } =
+        useForm<FormData>({ resolver: zodResolver(schema), defaultValues: { role: 'user' } });
 
-    useEffect(() => {
-        loadUsers();
+    const load = useCallback(async (p: number, ps: number) => {
+        try {
+            const res = await fetchUsers(p, ps);
+            setRows(res.data);
+            setTotal(res.total);
+            setTotalPages(res.totalPages);
+        } catch (e) { console.error(e); }
     }, []);
 
-    const loadUsers = async () => {
-        try {
-            setUsers(await fetchUsers());
-        } catch (e) {
-            console.error(e);
-        }
-    };
+    useEffect(() => { load(page, pageSize); }, [page, pageSize, load]);
 
-    const handleCreate = async (e: React.FormEvent) => {
-        e.preventDefault();
-        setLoading(true);
-        setError(null);
+    const onSubmit = async (data: FormData) => {
         try {
-            await createUser(name, role, password);
-            setName('');
-            setPassword('');
-            setRole('user');
-            await loadUsers();
+            await createUser(data.name, data.role, data.password);
+            reset();
+            load(1, pageSize);
+            setPage(1);
         } catch (err) {
-            setError(extractError(err));
-        } finally {
-            setLoading(false);
+            setError('root', { message: extractError(err) });
         }
     };
 
     const handleDelete = async (uId: string) => {
-        if (!confirm('Warning: Cascading actions may delete linked records. Proceed?')) return;
+        if (!confirm('Delete this user?')) return;
+        setActionError(null);
         try {
             await deleteUser(uId);
             if (user?.id === uId) setCredentials(null, null);
-            else await loadUsers();
+            else load(page, pageSize);
         } catch (err) {
-            alert("Failed: " + extractError(err));
+            setActionError(extractError(err));
         }
     };
 
     const handleChangeRole = async (uId: string, newRole: Role) => {
+        setActionError(null);
         try {
             await updateRole(uId, newRole);
             if (user?.id === uId) {
                 const token = localStorage.getItem('token');
                 setCredentials(token, { ...user, role: newRole });
             }
-            await loadUsers();
+            load(page, pageSize);
         } catch (err) {
-            alert("Failed setting role: " + extractError(err));
+            setActionError(extractError(err));
         }
-    }
+    };
 
     if (user?.role !== 'admin') {
-        return (
-            <div className="h-64 flex flex-col items-center justify-center max-w-2xl mx-auto border border-dashed border-destructive/50 rounded-xl bg-destructive/5 mt-12">
-                <ShieldAlert size={48} className="text-destructive mb-4" />
-                <h3 className="text-lg font-bold text-destructive">Restricted Access</h3>
-                <p className="text-sm text-foreground/70">Administrator scope required.</p>
-            </div>
-        );
+        return <p className="text-sm text-red-600 mt-4">Unauthorized. Admins only.</p>;
     }
 
+    const fc = (err: boolean) =>
+        `border rounded-md px-3 py-2 text-sm outline-none focus:ring-1 w-full ${err ? 'border-red-400 focus:border-red-400 focus:ring-red-200'
+            : 'border-gray-300 focus:border-blue-500 focus:ring-blue-500'}`;
+
     return (
-        <div className="flex flex-col gap-8 max-w-6xl">
+        <div className="flex flex-col gap-8 h-full">
             <div>
-                <h1 className="text-3xl font-bold tracking-tight text-foreground flex items-center gap-3">
-                    <Users className="h-8 w-8 text-primary" /> Core Identity
-                </h1>
-                <p className="text-muted-foreground mt-1">Full CRUD control over authentication objects.</p>
+                <h1 className="text-2xl font-semibold text-gray-900 mb-1">User Management</h1>
+                <p className="text-sm text-gray-500">Create and manage user accounts.</p>
             </div>
 
-            <Card className="shadow-sm border-primary/20">
-                <CardHeader className="bg-primary/5 border-b mb-4">
-                    <CardTitle className="flex items-center gap-2">
-                        <UserPlus className="h-5 w-5" /> Provision Node
-                    </CardTitle>
-                    <CardDescription>Inject a new authenticated user straight into the database cluster.</CardDescription>
-                </CardHeader>
-                <CardContent>
-                    <form onSubmit={handleCreate} className="grid grid-cols-1 md:grid-cols-4 gap-4 items-end">
-                        <div className="flex flex-col gap-2">
-                            <Label className="uppercase text-[10px] font-bold tracking-wider text-muted-foreground">Full Name / Tag</Label>
-                            <Input
-                                value={name}
-                                onChange={e => setName(e.target.value)}
-                                required
-                                placeholder="E.g., John Doe"
-                            />
-                        </div>
-                        <div className="flex flex-col gap-2">
-                            <Label className="uppercase text-[10px] font-bold tracking-wider text-muted-foreground">Access Level</Label>
-                            <select
-                                value={role}
-                                onChange={e => setRole(e.target.value as Role)}
-                                className="flex h-10 w-full items-center justify-between rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-ring focus:border-primary disabled:cursor-not-allowed disabled:opacity-50"
-                            >
-                                <option value="user">User (Standard)</option>
-                                <option value="owner">Owner (Privileged)</option>
-                                <option value="admin">Administrator (Root)</option>
-                            </select>
-                        </div>
-                        <div className="flex flex-col gap-2">
-                            <Label className="uppercase text-[10px] font-bold tracking-wider text-muted-foreground">Secure Secret</Label>
-                            <Input
-                                type="password"
-                                value={password}
-                                onChange={e => setPassword(e.target.value)}
-                                required
-                                placeholder="********"
-                            />
-                        </div>
-
-                        <Button disabled={loading} className="w-full text-sm font-semibold h-10">
-                            {loading ? 'Committing...' : 'Inject Record'}
-                        </Button>
-                    </form>
-                    {error && <p className="text-sm font-medium mt-4 text-destructive bg-destructive/10 p-3 rounded-md border border-destructive/20">{error}</p>}
-                </CardContent>
-            </Card>
-
-            <Card className="shadow-sm overflow-hidden border">
-                <CardHeader className="flex flex-row items-center justify-between py-4 bg-muted/30 pb-4 border-b">
-                    <div className="space-y-1">
-                        <CardTitle className="text-lg">Database Roster</CardTitle>
-                        <CardDescription>Currently resolving {users.length} entities.</CardDescription>
+            {/* Add User Form */}
+            <div className="bg-white border border-gray-200 rounded-lg p-6 shrink-0">
+                <h2 className="text-sm font-medium text-gray-900 mb-4">Add User</h2>
+                <form onSubmit={handleSubmit(onSubmit)} noValidate className="grid grid-cols-1 sm:grid-cols-4 gap-4 items-start">
+                    <div className="flex flex-col gap-1">
+                        <label className="text-xs text-gray-500">Name</label>
+                        <input type="text" placeholder="Full name" {...register('name')} className={fc(!!errors.name)} />
+                        {errors.name && <p className="text-xs text-red-600">{errors.name.message}</p>}
                     </div>
-                </CardHeader>
-                <div className="overflow-x-auto">
-                    <Table>
-                        <TableHeader>
-                            <TableRow className="bg-muted/30">
-                                <TableHead className="w-[80px] text-center">Entity</TableHead>
-                                <TableHead className="w-[300px]">Node Configuration</TableHead>
-                                <TableHead>Role Allocation</TableHead>
-                                <TableHead className="text-right pr-6">Lifecycle</TableHead>
-                            </TableRow>
-                        </TableHeader>
-                        <TableBody>
-                            {users.map((u) => (
-                                <TableRow key={u.id} className="group transition-colors flex-wrap">
-                                    <TableCell className="text-center">
-                                        <div className="h-10 w-10 mx-auto rounded-full bg-primary/10 flex items-center justify-center font-bold text-primary shrink-0">
-                                            {u.name.substring(0, 2).toUpperCase()}
-                                        </div>
-                                    </TableCell>
-                                    <TableCell>
-                                        <div className="flex flex-col gap-1 w-full overflow-hidden">
-                                            <span className="font-semibold text-sm truncate">{u.name}</span>
-                                            <span className="text-xs text-muted-foreground font-mono flex items-center gap-1.5 truncate max-w-full">
-                                                <Fingerprint className="h-3 w-3 shrink-0" />
-                                                <span className="truncate">{u.id}</span>
-                                            </span>
-                                        </div>
-                                    </TableCell>
-                                    <TableCell>
-                                        <div className="flex flex-col sm:flex-row items-start sm:items-center gap-2">
-                                            <Badge variant={u.role === 'admin' ? 'destructive' : u.role === 'owner' ? 'default' : 'secondary'} className="uppercase text-[10px] px-2 py-0.5 rounded-sm shrink-0 shadow-sm border">
-                                                {u.role}
-                                            </Badge>
-                                            <select
-                                                value={u.role}
-                                                onChange={(e) => handleChangeRole(u.id, e.target.value as Role)}
-                                                className="border border-input rounded-md text-xs bg-background h-7 px-2 outline-none focus:ring-2 focus:ring-primary shadow-sm hover:bg-muted shrink-0 w-[100px]"
-                                            >
-                                                <option value="user">User</option>
-                                                <option value="owner">Owner</option>
-                                                <option value="admin">Admin</option>
-                                            </select>
-                                        </div>
-                                    </TableCell>
-                                    <TableCell className="text-right pr-6 align-middle">
-                                        <Button
-                                            variant="ghost" size="icon"
-                                            className="h-8 w-8 text-muted-foreground hover:bg-destructive/10 hover:text-destructive shrink-0"
-                                            onClick={() => handleDelete(u.id)}
-                                        >
-                                            <Trash2 size={16} />
-                                        </Button>
-                                    </TableCell>
-                                </TableRow>
-                            ))}
-                        </TableBody>
-                    </Table>
+                    <div className="flex flex-col gap-1">
+                        <label className="text-xs text-gray-500">Password</label>
+                        <input type="password" placeholder="Min 6 chars" {...register('password')} className={fc(!!errors.password)} />
+                        {errors.password && <p className="text-xs text-red-600">{errors.password.message}</p>}
+                    </div>
+                    <div className="flex flex-col gap-1">
+                        <label className="text-xs text-gray-500">Role</label>
+                        <select {...register('role')}
+                            className="border border-gray-300 rounded-md px-3 py-2 text-sm outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-500 bg-white">
+                            <option value="user">User</option>
+                            <option value="owner">Owner</option>
+                            <option value="admin">Admin</option>
+                        </select>
+                    </div>
+                    <div className="flex flex-col gap-1 pt-4">
+                        <button type="submit" disabled={isSubmitting}
+                            className="px-4 py-2 bg-gray-900 text-white rounded-md text-sm font-medium hover:bg-gray-700 disabled:opacity-50 transition-colors">
+                            {isSubmitting ? 'Adding...' : 'Add User'}
+                        </button>
+                    </div>
+                </form>
+                {errors.root && (
+                    <p className="text-sm text-red-600 bg-red-50 border border-red-200 rounded-md px-3 py-2 mt-3">
+                        {errors.root.message}
+                    </p>
+                )}
+            </div>
+
+            {/* Users Table */}
+            <div className="bg-white border border-gray-200 rounded-lg overflow-hidden flex flex-col flex-1 min-h-0">
+                <div className="px-6 py-4 border-b border-gray-200 flex items-center justify-between shrink-0">
+                    <h2 className="text-sm font-medium text-gray-900">Users</h2>
+                    <span className="text-xs text-gray-500">{total} total</span>
                 </div>
-            </Card>
+                {actionError && (
+                    <div className="px-6 py-3 bg-red-50 border-b border-red-200">
+                        <p className="text-sm text-red-600">{actionError}</p>
+                    </div>
+                )}
+
+                <div className="flex-1 overflow-auto">
+                    <table className="w-full text-sm">
+                        <thead className="bg-gray-50 border-b border-gray-200 sticky top-0">
+                            <tr>
+                                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wide">Name</th>
+                                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wide">Role</th>
+                                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wide">ID</th>
+                                <th className="px-6 py-3 w-16"></th>
+                            </tr>
+                        </thead>
+                        <tbody className="divide-y divide-gray-100">
+                            {rows.map(u => (
+                                <tr key={u.id} className="hover:bg-gray-50">
+                                    <td className="px-6 py-3 font-medium text-gray-900">{u.name}</td>
+                                    <td className="px-6 py-3">
+                                        <select value={u.role} onChange={e => handleChangeRole(u.id, e.target.value as Role)}
+                                            className="border border-gray-200 rounded px-2 py-1 text-xs text-gray-700 bg-white outline-none focus:border-blue-400">
+                                            <option value="user">User</option>
+                                            <option value="owner">Owner</option>
+                                            <option value="admin">Admin</option>
+                                        </select>
+                                    </td>
+                                    <td className="px-6 py-3 text-gray-400 font-mono text-xs">{u.id}</td>
+                                    <td className="px-6 py-3 text-right">
+                                        <button onClick={() => handleDelete(u.id)}
+                                            className="text-xs text-red-500 hover:text-red-700 font-medium">
+                                            Delete
+                                        </button>
+                                    </td>
+                                </tr>
+                            ))}
+                        </tbody>
+                    </table>
+                </div>
+
+                <Pagination
+                    page={page} totalPages={totalPages}
+                    onPageChange={setPage}
+                    pageSize={pageSize} totalItems={total}
+                    onPageSizeChange={size => { setPageSize(size); setPage(1); }}
+                />
+            </div>
         </div>
     );
 };
