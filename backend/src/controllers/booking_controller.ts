@@ -4,13 +4,16 @@ import { BookingService } from '../services/booking_service';
 export const createBooking = async (req: Request, res: Response) => {
     try {
         const { startTime, endTime } = req.body;
-        const userId = req.user!.id; // Authenticated from middleware
+        const userId = req.user!.id;
 
         const booking = await BookingService.createBooking(userId, startTime, endTime);
         res.status(201).json({ success: true, data: booking });
     } catch (error: any) {
+        if (error.message === 'INVALID_TIME') {
+            return res.status(400).json({ success: false, error: 'startTime must be before endTime' });
+        }
         if (error.message === 'OVERLAP') {
-            return res.status(409).json({ success: false, error: 'Booking conflict: Overlapping time slot' });
+            return res.status(409).json({ success: false, error: 'Booking conflict: the requested time slot overlaps an existing booking' });
         }
         res.status(500).json({ success: false, error: error.message });
     }
@@ -18,8 +21,10 @@ export const createBooking = async (req: Request, res: Response) => {
 
 export const getBookings = async (req: Request, res: Response) => {
     try {
-        const bookings = await BookingService.getBookings();
-        res.status(200).json({ success: true, data: bookings });
+        const page = Math.max(1, parseInt(req.query.page as string) || 1);
+        const limit = Math.min(100, Math.max(1, parseInt(req.query.limit as string) || 10));
+        const result = await BookingService.getBookings(page, limit);
+        res.status(200).json({ success: true, ...result });
     } catch (error: any) {
         res.status(500).json({ success: false, error: error.message });
     }
@@ -38,7 +43,7 @@ export const deleteBooking = async (req: Request, res: Response) => {
             return res.status(404).json({ success: false, error: 'Booking not found' });
         }
         if (error.message === 'FORBIDDEN') {
-            return res.status(403).json({ success: false, error: 'Forbidden: You can only delete your own bookings' });
+            return res.status(403).json({ success: false, error: 'Forbidden: you can only delete your own bookings' });
         }
         res.status(500).json({ success: false, error: error.message });
     }

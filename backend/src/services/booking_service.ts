@@ -1,25 +1,34 @@
 import { db } from '../db';
 import { bookings, users } from '../db/schema';
-import { eq, and, lt, gt, sql } from 'drizzle-orm';
+import { eq, and, lt, gt, sql, count as drizzleCount } from 'drizzle-orm';
 
 export class BookingService {
     static async createBooking(userId: string, startTime: string, endTime: string) {
-        // 1. Transaction to check overlap and insert securely
-        return await db.transaction(async (tx) => {
-            const start = new Date(startTime);
-            const end = new Date(endTime);
+        // All times are treated as UTC. Callers must send ISO 8601 strings (e.g. "2024-01-01T09:00:00.000Z").
+        const start = new Date(startTime);
+        const end = new Date(endTime);
 
-            // Overlap rule: newStart < existing.endTime AND newEnd > existing.startTime
-            // Note: Because we use >= or strict >, we must be careful. 
-            // Rule says: Back-to-back bookings ARE allowed. 
-            // So if newEnd == existing.startTime -> Not an overlap (we want strictly newEnd > existing.startTime)
+        // Rule 1 (defence-in-depth): startTime must be strictly before endTime.
+        // This is also enforced at the HTTP layer via Zod, but we guard here too.
+        if (start >= end) {
+            throw new Error('INVALID_TIME');
+        }
+
+        return await db.transaction(async (tx) => {
+            // Overlap detection covers all cases:
+            //   - Identical ranges:           newStart < existingEnd  AND  newEnd > existingStart  ✓
+            //   - Partial overlaps:           same condition           ✓
+            //   - One range inside another:   same condition           ✓
+            //   - Back-to-back (ALLOWED):     newEnd == existingStart  → strict > means NOT detected, so allowed  ✓
+            //
+            // Boundary policy: if booking A ends at T, booking B may start at T (inclusive boundary, no gap required).
             const overlaps = await tx
                 .select()
                 .from(bookings)
                 .where(
                     and(
-                        lt(bookings.startTime, end), // existing.startTime < newEnd
-                        gt(bookings.endTime, start)  // existing.endTime > newStart
+                        lt(bookings.startTime, end),  // existingStart < newEnd
+                        gt(bookings.endTime, start)   // existingEnd   > newStart
                     )
                 )
                 .limit(1);
@@ -28,7 +37,6 @@ export class BookingService {
                 throw new Error('OVERLAP');
             }
 
-            // Insert new booking
             const [booking] = await tx.insert(bookings).values({
                 userId,
                 startTime: start,
@@ -39,8 +47,17 @@ export class BookingService {
         });
     }
 
-    static async getBookings() {
-        return await db.select().from(bookings).orderBy(bookings.startTime);
+    static async getBookings(page: number = 1, limit: number = 10) {
+        const offset = (page - 1) * limit;
+        const [{ count }] = await db.select({ count: sql<number>`cast(count(*) as int)` }).from(bookings);
+        const data = await db.select().from(bookings).orderBy(bookings.startTime).limit(limit).offset(offset);
+        return {
+            data,
+            total: count,
+            page,
+            limit,
+            totalPages: Math.ceil(count / limit),
+        };
     }
 
     static async deleteBooking(bookingId: string, requestingUserId: string, requestingUserRole: string) {
