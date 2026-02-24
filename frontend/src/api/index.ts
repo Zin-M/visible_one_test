@@ -5,7 +5,7 @@ const api = axios.create({
     baseURL: import.meta.env.VITE_API_URL,
 });
 
-// Intercept requests to inject the JWT token
+
 api.interceptors.request.use((config) => {
     const token = localStorage.getItem('token');
     if (token) {
@@ -14,7 +14,7 @@ api.interceptors.request.use((config) => {
     return config;
 });
 
-// A standard centralized format for error handling that components can safely extract
+
 export const extractError = (error: unknown): string => {
     if (axios.isAxiosError(error)) {
         return error.response?.data?.error || error.message;
@@ -25,13 +25,13 @@ export const extractError = (error: unknown): string => {
     return String(error);
 };
 
-// --- AUTH API --- //
+
 export const loginUser = async (name: string, password: string): Promise<{ token: string, user: User }> => {
     const { data } = await api.post('/auth/login', { name, password });
-    return data.data; // Server responds with { success: true, data: { token, user } }
+    return data.data; 
 };
 
-// --- USERS API --- //
+
 
 export interface Paginated<T> {
     data: T[];
@@ -43,7 +43,7 @@ export interface Paginated<T> {
 
 export const fetchUsers = async (page = 1, limit = 10): Promise<Paginated<User>> => {
     const { data } = await api.get('/users', { params: { page, limit } });
-    return data; // { success, data, total, page, limit, totalPages }
+    return data; 
 };
 
 export const createUser = async (name: string, role: Role, passwordRaw: string): Promise<User> => {
@@ -60,7 +60,7 @@ export const deleteUser = async (id: string): Promise<void> => {
     await api.delete(`/users/${id}`);
 };
 
-// --- BOOKINGS API --- //
+
 
 export const fetchBookings = async (page = 1, limit = 10): Promise<Paginated<Booking>> => {
     const { data } = await api.get('/bookings', { params: { page, limit } });

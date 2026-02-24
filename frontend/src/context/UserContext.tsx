@@ -16,7 +16,7 @@ export const UserProvider = ({ children }: { children: ReactNode }) => {
     const [isLoading, setIsLoading] = useState(true);
 
     useEffect(() => {
-        // Load user & token from localStorage
+        
         const storedUser = localStorage.getItem('user');
         const storedToken = localStorage.getItem('token');
         if (storedUser && storedToken) {

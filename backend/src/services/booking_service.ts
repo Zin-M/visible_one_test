@@ -4,31 +4,21 @@ import { eq, and, lt, gt, sql, count as drizzleCount } from 'drizzle-orm';
 
 export class BookingService {
     static async createBooking(userId: string, startTime: string, endTime: string) {
-        // All times are treated as UTC. Callers must send ISO 8601 strings (e.g. "2024-01-01T09:00:00.000Z").
         const start = new Date(startTime);
         const end = new Date(endTime);
 
-        // Rule 1 (defence-in-depth): startTime must be strictly before endTime.
-        // This is also enforced at the HTTP layer via Zod, but we guard here too.
         if (start >= end) {
             throw new Error('INVALID_TIME');
         }
 
         return await db.transaction(async (tx) => {
-            // Overlap detection covers all cases:
-            //   - Identical ranges:           newStart < existingEnd  AND  newEnd > existingStart  ✓
-            //   - Partial overlaps:           same condition           ✓
-            //   - One range inside another:   same condition           ✓
-            //   - Back-to-back (ALLOWED):     newEnd == existingStart  → strict > means NOT detected, so allowed  ✓
-            //
-            // Boundary policy: if booking A ends at T, booking B may start at T (inclusive boundary, no gap required).
             const overlaps = await tx
                 .select()
                 .from(bookings)
                 .where(
                     and(
-                        lt(bookings.startTime, end),  // existingStart < newEnd
-                        gt(bookings.endTime, start)   // existingEnd   > newStart
+                        lt(bookings.startTime, end),
+                        gt(bookings.endTime, start)
                     )
                 )
                 .limit(1);
@@ -75,9 +65,6 @@ export class BookingService {
     }
 
     static async getGroupedBookings() {
-        // Return bookings grouped by user
-        // Equivalent: SELECT user_id, count(*) as count, arr_agg(...) FROM bookings GROUP BY user_id
-        // But using ORM we can join and group, or fetch and map in-memory for simpler structures
         const allBookings = await db
             .select({
                 booking: bookings,
@@ -86,7 +73,6 @@ export class BookingService {
             .from(bookings)
             .leftJoin(users, eq(bookings.userId, users.id));
 
-        // Grouping in-memory for clean format
         const grouped = allBookings.reduce((acc, row) => {
             const uId = row.user?.id || 'unknown';
             if (!acc[uId]) {
@@ -100,7 +86,6 @@ export class BookingService {
     }
 
     static async getBookingSummary() {
-        // e.g. Total bookings, upcoming bookings, top booker
         const statsResult = await db.execute(sql`
       SELECT 
         COUNT(*) as "totalBookings",

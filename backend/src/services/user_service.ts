@@ -38,8 +38,8 @@ export class UserService {
     }
 
     static async deleteUser(id: string) {
-        // Cascade: remove the user's bookings first so no orphaned records remain.
-        // This is the defined system behavior when a user is deleted.
+        
+        
         await db.delete(bookings).where(eq(bookings.userId, id));
 
         const [deleted] = await db.delete(users).where(eq(users.id, id)).returning();

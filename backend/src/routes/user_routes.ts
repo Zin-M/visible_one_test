@@ -7,11 +7,11 @@ import { createUserSchema, changeRoleSchema } from '../validators/user';
 
 const router = Router();
 
-// All user routes require authentication
+
 router.use(requireAuth);
 
-// Any authenticated user can list users (needed for booking context)
-// Mutations are admin-only
+
+
 router.get('/', requireRole('admin', 'owner', 'user'), getUsers);
 
 router.post('/', requireRole('admin'), validateRequest(createUserSchema), createUser);

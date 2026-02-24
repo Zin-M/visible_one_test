@@ -23,7 +23,7 @@ app.get("/", (req, res) => {
     res.json({ message: "API is running" });
 });
 
-// Global error handler should be last
+
 app.use(errorHandler);
 
 import http from "http";

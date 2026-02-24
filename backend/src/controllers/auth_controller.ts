@@ -15,19 +15,19 @@ export const login = async (req: Request, res: Response) => {
             return res.status(400).json({ success: false, error: 'Name and password required' });
         }
 
-        // Find user
+        
         const [user] = await db.select().from(users).where(eq(users.name, name));
         if (!user) {
             return res.status(401).json({ success: false, error: 'Invalid name or password' });
         }
 
-        // Verify
+        
         const isValid = await bcrypt.compare(password, user.password);
         if (!isValid) {
             return res.status(401).json({ success: false, error: 'Invalid name or password' });
         }
 
-        // Generate token
+        
         const token = jwt.sign(
             { id: user.id, role: user.role },
             JWT_SECRET,

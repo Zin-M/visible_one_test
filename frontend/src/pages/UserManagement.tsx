@@ -89,7 +89,7 @@ export const UserManagement = () => {
                 <p className="text-sm text-gray-500">Create and manage user accounts.</p>
             </div>
 
-            {/* Add User Form */}
+            {}
             <div className="bg-white border border-gray-200 rounded-lg p-6 shrink-0">
                 <h2 className="text-sm font-medium text-gray-900 mb-4">Add User</h2>
                 <form onSubmit={handleSubmit(onSubmit)} noValidate className="grid grid-cols-1 sm:grid-cols-4 gap-4 items-start">
@@ -126,7 +126,7 @@ export const UserManagement = () => {
                 )}
             </div>
 
-            {/* Users Table */}
+            {}
             <div className="bg-white border border-gray-200 rounded-lg overflow-hidden flex flex-col flex-1 min-h-0">
                 <div className="px-6 py-4 border-b border-gray-200 flex items-center justify-between shrink-0">
                     <h2 className="text-sm font-medium text-gray-900">Users</h2>

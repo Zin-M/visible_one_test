@@ -78,7 +78,7 @@ export const Bookings = () => {
                 <p className="text-sm text-gray-500">Create and manage meeting room reservations.</p>
             </div>
 
-            {/* New Booking Form */}
+            {}
             <div className="bg-white border border-gray-200 rounded-lg p-6 shrink-0">
                 <h2 className="text-sm font-medium text-gray-900 mb-4">New Booking</h2>
                 <form onSubmit={handleSubmit(onSubmit)} noValidate className="flex flex-col sm:flex-row gap-4 items-start">
@@ -106,7 +106,7 @@ export const Bookings = () => {
                 )}
             </div>
 
-            {/* Table */}
+            {}
             <div className="bg-white border border-gray-200 rounded-lg overflow-hidden flex flex-col flex-1 min-h-0">
                 <div className="px-6 py-4 border-b border-gray-200 flex items-center justify-between shrink-0">
                     <h2 className="text-sm font-medium text-gray-900">All Bookings</h2>
